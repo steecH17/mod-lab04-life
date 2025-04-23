@@ -145,8 +145,11 @@ namespace cli_life
                 {
                     if (Cells[x, y].IsAlive && !visited[x, y])
                     {
-                        BFS(x, y, visited);
-                        combinationCount++;
+                        int groupSize = BFS(x, y, visited);
+                        if (groupSize > 1) // Только если в группе больше 1 клетки
+                        {
+                            combinationCount++;
+                        }
                     }
                 }
             }
@@ -154,21 +157,23 @@ namespace cli_life
             return combinationCount;
         }
 
-        private void BFS(int startX, int startY, bool[,] visited)
+        private int BFS(int startX, int startY, bool[,] visited)
         {
             Queue<(int x, int y)> queue = new Queue<(int x, int y)>();
             queue.Enqueue((startX, startY));
             visited[startX, startY] = true;
+            int groupSize = 1; // Начинаем с 1 (текущая клетка)
 
             while (queue.Count > 0)
             {
                 var (x, y) = queue.Dequeue();
 
+                // Проверяем всех 8 соседей
                 for (int dx = -1; dx <= 1; dx++)
                 {
                     for (int dy = -1; dy <= 1; dy++)
                     {
-                        if (dx == 0 && dy == 0) continue;
+                        if (dx == 0 && dy == 0) continue; // Пропускаем текущую клетку
 
                         int nx = x + dx;
                         int ny = y + dy;
@@ -179,11 +184,14 @@ namespace cli_life
                             {
                                 visited[nx, ny] = true;
                                 queue.Enqueue((nx, ny));
+                                groupSize++; // Увеличиваем счётчик группы
                             }
                         }
                     }
                 }
             }
+
+            return groupSize;
         }
     }
 
@@ -254,7 +262,7 @@ namespace cli_life
             }
             Console.WriteLine($"Generation:{generation}\n");
             Console.WriteLine($"Count live cells:{board.CountLiveCells()}\n");
-            Console.WriteLine($"Count live cells:{board.CountCombinations()}\n");
+            Console.WriteLine($"Count combinations:{board.CountCombinations()}\n");
         }
 
         static bool KeyPressHandler(string filePath)
@@ -278,12 +286,11 @@ namespace cli_life
 
         static void Main(string[] args)
         {
-            string projectDirectory = Directory.GetCurrentDirectory();
-            string solutionDirectory = Directory.GetParent(projectDirectory).Parent.Parent.FullName;
-            string propertyPath = @"C:\Users\vniki\source\repos\mod-lab04-gameOfLife\mod-lab04-life\Life\Property.json";
-            //string propertyPath = Path.Combine(solutionDirectory, "Property.json");
-            string boardFilePath = @"C:\Users\vniki\source\repos\mod-lab04-gameOfLife\mod-lab04-life\Life\BoardData.txt";
-            //string boardFilePath = Path.Combine(solutionDirectory, "BoardData.txt");
+            // string propertyPath = @"C:\Users\vniki\source\repos\mod-lab04-gameOfLife\mod-lab04-life\Life\Property.json";
+            // string boardFilePath = @"C:\Users\vniki\source\repos\mod-lab04-gameOfLife\mod-lab04-life\Life\BoardData.txt";
+            string projectDirectory = Environment.CurrentDirectory;
+            string propertyPath = Path.Combine(projectDirectory, "Property.json");
+            string boardFilePath = Path.Combine(projectDirectory, "BoardData.txt");
             BoardProperty boardProperty = JsonReader.PropertyReader(propertyPath);
 
             board = DataStorage.LoadState(boardFilePath);
