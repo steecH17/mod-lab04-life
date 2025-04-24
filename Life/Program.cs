@@ -8,6 +8,7 @@ using System.Dynamic;
 using System.IO;
 using System.Text.Json;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection.Metadata;
 
 namespace cli_life
 {
@@ -55,7 +56,7 @@ namespace cli_life
     {
         public readonly Cell[,] Cells;
         public readonly int CellSize;
-
+        public int generation;
         public int Columns { get { return Cells.GetLength(0); } }
         public int Rows { get { return Cells.GetLength(1); } }
         public int Width { get { return Columns * CellSize; } }
@@ -70,6 +71,8 @@ namespace cli_life
                 for (int y = 0; y < Rows; y++)
                     Cells[x, y] = new Cell();
 
+            generation = 0;
+
             ConnectNeighbors();
             Randomize(liveDensity);
         }
@@ -83,6 +86,8 @@ namespace cli_life
                 for (int y = 0; y < Rows; y++)
                     Cells[x, y] = new Cell();
 
+            generation = 0;
+
             ConnectNeighbors();
         }
 
@@ -95,6 +100,8 @@ namespace cli_life
 
         public void Advance()
         {
+            generation++;
+
             foreach (var cell in Cells)
                 cell.DetermineNextLiveState();
             foreach (var cell in Cells)
@@ -124,75 +131,288 @@ namespace cli_life
             }
         }
 
+    }
+
+    public class Pattern
+    {
+        public string Name { get; set; }
+        public bool[,] Structure { get; set; }
+        public int Size { get; set; }
+
+        public Pattern(string name, bool[,] structure)
+        {
+            Name = name;
+            Structure = structure;
+            Size = structure.GetLength(0); // Предполагаем квадратные шаблоны
+        }
+    }
+    public class BoardAnalysis
+    {
+        public Board Board { get; set; }
+        public int GetCountLiveCells {get;set;}
+        public int GetCountCombinations {get;set;}
+        public int timeStable;
+        List<Pattern> KnownPatterns = new List<Pattern>();
+        int periodStablePhase;
+        int currentTimeStable;
+        public BoardAnalysis(Board board, string dirName)
+        {
+            this.Board = board;
+            KnownPatterns = GetPatterns(dirName);
+            periodStablePhase = 20;
+            currentTimeStable = 0;
+            GetCountLiveCells = CountLiveCells();
+        }
+
+        private List<Pattern> GetPatterns(string dirName)
+        {
+            List<Pattern> patterns = new List<Pattern>();
+            string[] filenames = Directory.GetFiles(dirName);
+            foreach (var filename in filenames)
+            {
+                string[] lines = File.ReadAllLines(filename);
+                bool[,] templates = new bool[lines.Length, lines[0].Length];
+
+                for (int i = 0; i < templates.GetLength(0); i++)
+                {
+                    for (int j = 0; j < templates.GetLength(1); j++)
+                    {
+                        if (lines[i][j] == '1') templates[i, j] = true;
+                        else templates[i, j] = false;
+                    }
+                }
+
+                patterns.Add(new Pattern(Path.GetFileNameWithoutExtension(filename), templates));
+            }
+
+            return patterns;
+        }
+
+        public bool IsStable()
+        {
+            if (GetCountLiveCells == CountLiveCells())
+                currentTimeStable++;
+            else
+                currentTimeStable = 0;
+
+            if (currentTimeStable >= periodStablePhase)
+            {
+                timeStable = currentTimeStable == periodStablePhase ? Board.generation : timeStable;
+                return true;
+            }
+
+            GetCountLiveCells = CountLiveCells();
+
+            return false;
+        }
+
         public int CountLiveCells()
         {
             int count = 0;
-            for (int x = 0; x < Columns; x++)
-                for (int y = 0; y < Rows; y++)
-                    if (Cells[x, y].IsAlive)
+            for (int x = 0; x < Board.Columns; x++)
+                for (int y = 0; y < Board.Rows; y++)
+                    if (Board.Cells[x, y].IsAlive)
                         count++;
+
             return count;
         }
 
-        public int CountCombinations()
+        public Dictionary<string, int> ClassifyPatterns()
         {
-            bool[,] visited = new bool[Columns, Rows];
-            int combinationCount = 0;
+            var patternCounts = new Dictionary<string, int>();
+            bool[,] visited = new bool[Board.Columns, Board.Rows];
 
-            for (int x = 0; x < Columns; x++)
+            // Инициализация словаря
+            foreach (var pattern in KnownPatterns)
             {
-                for (int y = 0; y < Rows; y++)
+                patternCounts[pattern.Name] = 0;
+            }
+            patternCounts["Unknown"] = 0;
+
+            for (int x = 0; x < Board.Columns; x++)
+            {
+                for (int y = 0; y < Board.Rows; y++)
                 {
-                    if (Cells[x, y].IsAlive && !visited[x, y])
+                    if (Board.Cells[x, y].IsAlive && !visited[x, y])
                     {
-                        int groupSize = BFS(x, y, visited);
-                        if (groupSize > 1) // Только если в группе больше 1 клетки
+                        var group = ExtractGroup(x, y, visited);
+                        bool isPatternFound = false;
+
+                        foreach (var pattern in KnownPatterns)
                         {
-                            combinationCount++;
+                            if (IsPatternMatch(group, pattern))
+                            {
+                                patternCounts[pattern.Name]++;
+                                isPatternFound = true;
+                                break;
+                            }
+                        }
+
+                        if (!isPatternFound && group.Count > 1) // Не учитываем одиночные клетки
+                        {
+                            patternCounts["Unknown"]++;
                         }
                     }
                 }
             }
 
-            return combinationCount;
+            return patternCounts;
         }
 
-        private int BFS(int startX, int startY, bool[,] visited)
+        // Извлекает группу связанных живых клеток
+        private List<(int x, int y)> ExtractGroup(int startX, int startY, bool[,] visited)
         {
-            Queue<(int x, int y)> queue = new Queue<(int x, int y)>();
+            var group = new List<(int x, int y)>();
+            var queue = new Queue<(int x, int y)>();
             queue.Enqueue((startX, startY));
             visited[startX, startY] = true;
-            int groupSize = 1; // Начинаем с 1 (текущая клетка)
 
             while (queue.Count > 0)
             {
                 var (x, y) = queue.Dequeue();
+                group.Add((x, y));
 
-                // Проверяем всех 8 соседей
                 for (int dx = -1; dx <= 1; dx++)
                 {
                     for (int dy = -1; dy <= 1; dy++)
                     {
-                        if (dx == 0 && dy == 0) continue; // Пропускаем текущую клетку
+                        if (dx == 0 && dy == 0) continue;
 
                         int nx = x + dx;
                         int ny = y + dy;
 
-                        if (nx >= 0 && nx < Columns && ny >= 0 && ny < Rows)
+                        if (nx >= 0 && nx < Board.Columns && ny >= 0 && ny < Board.Rows)
                         {
-                            if (Cells[nx, ny].IsAlive && !visited[nx, ny])
+                            if (Board.Cells[nx, ny].IsAlive && !visited[nx, ny])
                             {
                                 visited[nx, ny] = true;
                                 queue.Enqueue((nx, ny));
-                                groupSize++; // Увеличиваем счётчик группы
                             }
                         }
                     }
                 }
             }
 
-            return groupSize;
+            return group;
         }
+
+        // Проверяет, соответствует ли группа шаблону (с учётом поворотов и отражений)
+        private bool IsPatternMatch(List<(int x, int y)> group, Pattern pattern)
+        {
+            if (group.Count != pattern.Structure.Cast<bool>().Count(c => c))
+                return false;
+
+            // Находим границы группы
+            int minX = group.Min(c => c.x);
+            int maxX = group.Max(c => c.x);
+            int minY = group.Min(c => c.y);
+            int maxY = group.Max(c => c.y);
+
+            int groupWidth = maxX - minX + 1;
+            int groupHeight = maxY - minY + 1;
+
+            int patternRows = pattern.Structure.GetLength(0);
+            int patternCols = pattern.Structure.GetLength(1);
+
+            // Группа должна помещаться в шаблон после поворота/отражения
+            if ((groupWidth > patternRows && groupWidth > patternCols) ||
+                (groupHeight > patternRows && groupHeight > patternCols))
+                return false;
+
+            // Проверяем все возможные повороты и отражения шаблона
+            for (int rotation = 0; rotation < 4; rotation++)
+            {
+                var rotatedPattern = RotatePattern(pattern.Structure, rotation);
+                if (CheckPatternMatch(group, rotatedPattern, minX, minY))
+                    return true;
+
+                var mirroredPattern = MirrorPattern(rotatedPattern);
+                if (CheckPatternMatch(group, mirroredPattern, minX, minY))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool CheckPatternMatch(List<(int x, int y)> group, bool[,] pattern, int offsetX, int offsetY)
+        {
+            int patternRows = pattern.GetLength(0);
+            int patternCols = pattern.GetLength(1);
+
+            // Проверяем, что группа точно соответствует шаблону
+            for (int i = 0; i < patternRows; i++)
+            {
+                for (int j = 0; j < patternCols; j++)
+                {
+                    bool expected = pattern[i, j];
+                    int x = offsetX + i;
+                    int y = offsetY + j;
+
+                    bool actual = group.Contains((x, y));
+
+                    if (expected != actual)
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        // Поворачивает шаблон на 90° * rotation
+        private bool[,] RotatePattern(bool[,] pattern, int rotation)
+        {
+            int rows = pattern.GetLength(0);
+            int cols = pattern.GetLength(1);
+
+            // При повороте на 90° или 270° размеры меняются местами
+            int newRows = (rotation % 2 == 1) ? cols : rows;
+            int newCols = (rotation % 2 == 1) ? rows : cols;
+
+            var result = new bool[newRows, newCols];
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    switch (rotation % 4)
+                    {
+                        case 0: // Без поворота
+                            result[i, j] = pattern[i, j];
+                            break;
+                        case 1: // Поворот на 90° по часовой
+                            result[j, newCols - 1 - i] = pattern[i, j];
+                            break;
+                        case 2: // Поворот на 180°
+                            result[newRows - 1 - i, newCols - 1 - j] = pattern[i, j];
+                            break;
+                        case 3: // Поворот на 270° по часовой (или 90° против)
+                            result[newRows - 1 - j, i] = pattern[i, j];
+                            break;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        // Отражает шаблон по горизонтали
+        private bool[,] MirrorPattern(bool[,] pattern)
+        {
+            int rows = pattern.GetLength(0);
+            int cols = pattern.GetLength(1);
+            var result = new bool[rows, cols];
+
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
+                {
+                    result[i, cols - 1 - j] = pattern[i, j];
+                }
+            }
+
+            return result;
+        }
+
     }
 
     public class DataStorage
@@ -202,9 +422,9 @@ namespace cli_life
             using StreamWriter streamWriter = new StreamWriter(filePath);
             Cell[,] cells = board.Cells;
 
-            for (int col = 0; col < board.Columns; col++)
+            for (int row = 0; row < board.Rows; row++)
             {
-                for (int row = 0; row < board.Rows; row++)
+                for (int col = 0; col < board.Columns; col++)
                 {
                     streamWriter.Write(cells[col, row].IsAlive ? '1' : '0');
                 }
@@ -232,18 +452,26 @@ namespace cli_life
     }
     class Program
     {
+        static bool isPause = false;
         static Board board;
+        static BoardAnalysis boardAnalysis;
+        static BoardProperty boardProperty;
         static int generation = 0;
-        static private void Reset(BoardProperty boardProperty)
+
+        static private void Reset(BoardProperty boardProperty, string dirName)
         {
             board = new Board(
                 boardProperty.BoardWidth,
                 boardProperty.BoardHeight,
                 boardProperty.BoardCellSize,
                 boardProperty.LiveDensity);
+
+            boardAnalysis = new BoardAnalysis(board, dirName);
         }
         static void Render()
         {
+            StringBuilder stringBuilder = new StringBuilder();
+
             for (int row = 0; row < board.Rows; row++)
             {
                 for (int col = 0; col < board.Columns; col++)
@@ -251,21 +479,50 @@ namespace cli_life
                     var cell = board.Cells[col, row];
                     if (cell.IsAlive)
                     {
-                        Console.Write('*');
+                        stringBuilder.Append('*');
+                        //Console.Write("*");
                     }
                     else
                     {
-                        Console.Write(' ');
+                        stringBuilder.Append(' ');
+                        //Console.Write(" ");
                     }
                 }
-                Console.Write('\n');
+                stringBuilder.Append('\n');
+                //Console.Write('\n');
             }
-            Console.WriteLine($"Generation:{generation}\n");
-            Console.WriteLine($"Count live cells:{board.CountLiveCells()}\n");
-            Console.WriteLine($"Count combinations:{board.CountCombinations()}\n");
+            stringBuilder.Append(GetInfoString());
+
+            Console.Write(stringBuilder);
         }
 
-        static bool KeyPressHandler(string filePath)
+        static string GetInfoString()
+        {
+            StringBuilder builder = new StringBuilder();
+            int totalCombinations = 0;
+
+            builder.Append($"Generation:{generation}\n");
+            builder.Append($"Count live cells:{boardAnalysis.CountLiveCells()}\n");
+
+            if (boardAnalysis.IsStable())
+            {
+                builder.Append($"System is Stable on generation : {boardAnalysis.timeStable}!!!\n");
+
+                var patternCounts = boardAnalysis.ClassifyPatterns();
+
+                foreach (var entry in patternCounts)
+                {
+                    builder.Append($"{entry.Key}: {entry.Value}\n");
+                    if(entry.Value > 0)
+                        totalCombinations+= entry.Value;
+                }
+                builder.Append($"Total combinations:{totalCombinations}\n");
+            }
+
+            return builder.ToString();
+        }
+
+        static bool? KeyPressHandler(string filePath)
         {
             if (Console.KeyAvailable)
             {
@@ -275,13 +532,73 @@ namespace cli_life
                 {
                     case ConsoleKey.S:
                         DataStorage.SaveState(filePath, board);
-                        Console.WriteLine("File Have benn saved!!");
+                        Console.WriteLine("File Have been saved!!!");
                         break;
+                    case ConsoleKey.P:
+                        isPause = !isPause;
+                        break;
+                    case ConsoleKey.Escape:
+                        return null;
                 }
 
-                return true;
+                return false;
             }
             else return false;
+        }
+
+        static void RunGame(string filePath)
+        {
+
+            while (true)
+            {
+
+                if (KeyPressHandler(filePath) == null)
+                    break;
+                if (KeyPressHandler(filePath) == true)
+                    break;
+
+                if (!isPause)
+                {
+                    generation++;
+                    Console.Clear();
+                    Render();
+                    board.Advance();
+                    boardAnalysis.Board = board;
+                    Thread.Sleep(100);
+                }
+
+            }
+        }
+
+        static void StabilityAnalyzer(string outputFilePath, double densityStep)
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+
+            string dirName = Path.Combine(Environment.CurrentDirectory, "pattern/");
+
+            for(decimal density = 0.05m; density <= 1.0m; density+=(decimal)densityStep)
+            {
+                board = new Board(
+                boardProperty.BoardWidth,
+                boardProperty.BoardHeight,
+                boardProperty.BoardCellSize,
+                (double)density);
+
+                boardAnalysis = new BoardAnalysis(board, dirName);
+
+                for (int gen = 0; gen < 10000; gen++)
+                {
+                    if(boardAnalysis.IsStable())
+                    {
+                        stringBuilder.Append($"{(double)density} {boardAnalysis.timeStable}\n");
+                        break;
+                    }
+                    board.Advance();
+                }
+            }
+
+            File.WriteAllText(outputFilePath, stringBuilder.ToString());
+
         }
 
         static void Main(string[] args)
@@ -291,21 +608,15 @@ namespace cli_life
             string projectDirectory = Environment.CurrentDirectory;
             string propertyPath = Path.Combine(projectDirectory, "Property.json");
             string boardFilePath = Path.Combine(projectDirectory, "BoardData.txt");
-            BoardProperty boardProperty = JsonReader.PropertyReader(propertyPath);
+            string dirName = Path.Combine(Environment.CurrentDirectory, "pattern/");
+            string dataPlotPath = Path.Combine(Environment.CurrentDirectory, "data.txt");
+            boardProperty = JsonReader.PropertyReader(propertyPath);
 
-            board = DataStorage.LoadState(boardFilePath);
-            //Reset(boardProperty);
-            while (true)
-            {
-                generation++;
-                if (KeyPressHandler(boardFilePath))
-                    break;
-                Console.Clear();
-                Render();
-                board.Advance();
-                Thread.Sleep(5000);
+            //board = DataStorage.LoadState(filePath);
+            Reset(boardProperty, dirName);
+            RunGame(boardFilePath);
 
-            }
+            // StabilityAnalyzer(dataPlotPath, 0.05d);
         }
     }
 }

@@ -1,5 +1,5 @@
 {
-    "BoardWidth" : 40,
+    "BoardWidth" : 30,
     "BoardHeight" : 20,
     "BoardCellSize" : 1,
     "LiveDensity" : 0.6
