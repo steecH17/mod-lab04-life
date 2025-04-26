@@ -205,7 +205,6 @@ public class BoardAnalysisTests
     [Fact]
     public void BoardAnalysis_CountsCombinations_Correctly()
     {
-        // Arrange
         var board = new Board(5, 5, 1);
         
         // block
@@ -225,14 +224,12 @@ public class BoardAnalysisTests
         
         var analysis = new BoardAnalysis(board, dirName);
         
-        // Act
         var combinations = analysis.ClassifyPatterns();
         
-        // Assert
-        Assert.Equal(1, combinations["block"]); // Блок не распознан, но считается как комбинация
-        Assert.Equal(1, combinations["Unknown"]); // Блок не распознан, но считается как комбинация
-        Assert.Equal(1, combinations["blinker"]); // Блок не распознан, но считается как комбинация
-        Assert.Equal(3, combinations.Values.Sum()); // Всего живых клеток
+        Assert.Equal(1, combinations["block"]); 
+        Assert.Equal(1, combinations["Unknown"]); 
+        Assert.Equal(1, combinations["blinker"]); 
+        Assert.Equal(3, combinations.Values.Sum()); 
     }
 }
 

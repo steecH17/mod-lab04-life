@@ -522,7 +522,7 @@ namespace cli_life
             return builder.ToString();
         }
 
-        static bool? KeyPressHandler(string filePath)
+        static bool KeyPressHandler(string filePath)
         {
             if (Console.KeyAvailable)
             {
@@ -538,12 +538,11 @@ namespace cli_life
                         isPause = !isPause;
                         break;
                     case ConsoleKey.Escape:
-                        return null;
+                        return true;
                 }
 
-                return false;
             }
-            else return false;
+            return false;
         }
 
         static void RunGame(string filePath)
@@ -551,10 +550,7 @@ namespace cli_life
 
             while (true)
             {
-
-                if (KeyPressHandler(filePath) == null)
-                    break;
-                if (KeyPressHandler(filePath) == true)
+                if (KeyPressHandler(filePath))
                     break;
 
                 if (!isPause)
@@ -603,13 +599,12 @@ namespace cli_life
 
         static void Main(string[] args)
         {
-            // string propertyPath = @"C:\Users\vniki\source\repos\mod-lab04-gameOfLife\mod-lab04-life\Life\Property.json";
-            // string boardFilePath = @"C:\Users\vniki\source\repos\mod-lab04-gameOfLife\mod-lab04-life\Life\BoardData.txt";
             string projectDirectory = Environment.CurrentDirectory;
             string propertyPath = Path.Combine(projectDirectory, "Property.json");
             string boardFilePath = Path.Combine(projectDirectory, "BoardData.txt");
             string dirName = Path.Combine(Environment.CurrentDirectory, "pattern/");
             string dataPlotPath = Path.Combine(Environment.CurrentDirectory, "data.txt");
+            
             boardProperty = JsonReader.PropertyReader(propertyPath);
 
             //board = DataStorage.LoadState(filePath);
