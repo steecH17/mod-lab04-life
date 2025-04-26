@@ -38,7 +38,7 @@ namespace cli_life
     {
         public bool IsAlive;
         public readonly List<Cell> neighbors = new List<Cell>();
-        private bool IsAliveNext;
+        public bool IsAliveNext;
         public void DetermineNextLiveState()
         {
             int liveNeighbors = neighbors.Where(x => x.IsAlive).Count();
@@ -152,7 +152,7 @@ namespace cli_life
         public int GetCountLiveCells {get;set;}
         public int GetCountCombinations {get;set;}
         public int timeStable;
-        List<Pattern> KnownPatterns = new List<Pattern>();
+        public readonly List<Pattern> KnownPatterns = new List<Pattern>();
         int periodStablePhase;
         int currentTimeStable;
         public BoardAnalysis(Board board, string dirName)
